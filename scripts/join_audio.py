@@ -79,7 +79,7 @@ def main():
                 if prior.get("voice", voice) != voice:
                     raise ValueError("分段音色与 --voice 不一致；请使用相同音色的分段")
                 speech_details[item["audio"]] = {key: prior[key] for key in ("instruct", "experimental", "tempo_factor") if key in prior}
-    python = ensure_runtime(voice == "my-voice")
+    python = ensure_runtime(audio=True)
     if Path(sys.executable).absolute() != python.absolute():
         sys.exit(subprocess.run([str(python), str(Path(__file__).resolve()), *sys.argv[1:]]).returncode)
     import numpy as np

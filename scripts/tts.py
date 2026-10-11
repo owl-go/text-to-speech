@@ -14,25 +14,7 @@ import tempfile
 import uuid
 
 from setup_runtime import DATA_ROOT, ensure_runtime
-
-SKILL_ROOT = Path(__file__).resolve().parents[1]
-VOICES = {
-    "my-voice": {"name": "我的音色", "backend": "local", "aliases": ["自己的音色", "自己的声音", "我的声音", "原声", "原声音色"]},
-    "yunyang": {"name": "云扬", "id": "zh-CN-YunyangNeural", "aliases": ["云杨"]},
-    "yunjian": {"name": "云健", "id": "zh-CN-YunjianNeural"},
-    "yunxi": {"name": "云希", "id": "zh-CN-YunxiNeural"},
-    "yunxia": {"name": "云夏", "id": "zh-CN-YunxiaNeural"},
-    "xiaoxiao": {"name": "晓晓", "id": "zh-CN-XiaoxiaoNeural"},
-    "xiaoyi": {"name": "晓伊", "id": "zh-CN-XiaoyiNeural"},
-}
-
-
-def resolve_voice(value):
-    for key, item in VOICES.items():
-        if value in [key, item["name"], item.get("id"), *item.get("aliases", [])]:
-            return key
-    raise ValueError(f"未知音色：{value}。用 list-voices 查看可选音色。")
-
+from voices import VOICES, is_clone, load_clone_profile, resolve_voice, voice_catalog
 
 def positive(value):
     result = float(value)
@@ -45,6 +27,12 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     commands = p.add_subparsers(dest="command", required=True)
     commands.add_parser("list-voices")
+    clone = commands.add_parser("clone-voice", help="指定名称后录制，或导入授权音频建立克隆音色")
+    clone.add_argument("--name", required=True)
+    clone.add_argument("--seconds", type=positive, default=15, help="麦克风录制时长，默认 15 秒，至少 3 秒")
+    clone.add_argument("--file", type=Path, help="导入已有音频，跳过麦克风录制")
+    clone.add_argument("--device", default="default", help="macOS 音频设备名称或编号，默认 default")
+    clone.add_argument("--replace", action="store_true", help="用户明确要求重录时替换同名音色")
     for name in ["generate", "retime"]:
         sub = commands.add_parser(name)
         if name == "generate":
@@ -53,7 +41,7 @@ def parser():
             source.add_argument("--file", type=Path)
             sub.add_argument("--voice", default="yunyang")
             sub.add_argument("--language", default="chinese")
-            sub.add_argument("--instruct", help="我的音色：实验性情绪/语气指令；Base 模型效果需试听判断")
+            sub.add_argument("--instruct", help="克隆音色：实验性情绪/语气指令；Base 模型效果需试听判断")
         else:
             sub.add_argument("--source", type=Path, required=True)
         tempo = sub.add_mutually_exclusive_group()
@@ -136,12 +124,8 @@ def split_text(text):
     return chunks
 
 
-def generate_clone(text, language, folder, instruct=None):
-    profile_path = SKILL_ROOT / "assets/voices/my-voice/profile.json"
-    profile = json.loads(profile_path.read_text(encoding="utf-8"))
-    reference = profile_path.parent / profile["reference_audio"]
-    if not reference.is_file():
-        raise RuntimeError(f"缺少自己的音色参考样本：{reference}")
+def generate_clone(text, language, folder, instruct=None, voice="my-voice"):
+    profile, reference = load_clone_profile(voice)
     model_path = DATA_ROOT / "models" / profile["model"].split("/")[-1]
     if not (model_path / "config.json").exists():
         os.environ["HF_HUB_DISABLE_XET"] = "1"
@@ -234,7 +218,15 @@ def subtitles(cues, speed, audio_seconds, estimated):
 def main():
     args = parser().parse_args()
     if args.command == "list-voices":
-        print(json.dumps(VOICES, ensure_ascii=False, indent=2))
+        print(json.dumps(voice_catalog(), ensure_ascii=False, indent=2))
+        return
+    if args.command == "clone-voice":
+        from clone_voice import clone_voice, validate_clone_request
+        validate_clone_request(args.name, args.seconds, args.file, args.replace)
+        python = ensure_runtime()
+        if Path(sys.executable).absolute() != python.absolute():
+            sys.exit(subprocess.run([str(python), str(Path(__file__).resolve()), *sys.argv[1:]]).returncode)
+        print(json.dumps(clone_voice(args.name, args.seconds, args.file, args.device, args.replace, ffmpeg()), ensure_ascii=False, indent=2))
         return
     voice = resolve_voice(args.voice) if args.command == "generate" else None
     speed = base_speed(args)  # Validate before installing dependencies or generating anything.
@@ -243,19 +235,21 @@ def main():
             args.instruct = args.instruct.strip()
             if not args.instruct:
                 raise ValueError("--instruct 不能为空")
-            if voice != "my-voice":
-                raise ValueError("--instruct 仅用于我的音色的实验性情绪控制；预设 Edge 音色不支持此参数。")
+            if not is_clone(voice):
+                raise ValueError("--instruct 仅用于克隆音色的实验性情绪控制；预设 Edge 音色不支持此参数。")
         text = args.file.read_text(encoding="utf-8") if args.file else args.text
         text = text.strip()
         if not text:
             raise ValueError("正文不能为空")
+        if is_clone(voice):
+            load_clone_profile(voice)
     else:
         source_folder = args.source.resolve()
         prior = json.loads((source_folder / "metadata.json").read_text(encoding="utf-8"))
         raw_source = source_folder / prior["source_audio"]
         if not raw_source.is_file():
             raise ValueError("原始音频已丢失，无法复用变速")
-    python = ensure_runtime(voice == "my-voice")
+    python = ensure_runtime(voice is not None and is_clone(voice))
     if Path(sys.executable).absolute() != python.absolute():
         completed = subprocess.run([str(python), str(Path(__file__).resolve()), *sys.argv[1:]])
         sys.exit(completed.returncode)
@@ -264,8 +258,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix=".tts-", dir=args.output_dir) as temp:
         folder = Path(temp)
         if args.command == "generate":
-            if voice == "my-voice":
-                source, cues, metadata = generate_clone(text, args.language, folder, instruct=args.instruct)
+            if is_clone(voice):
+                source, cues, metadata = generate_clone(text, args.language, folder, instruct=args.instruct, voice=voice)
             else:
                 source, cues, metadata = asyncio.run(generate_edge(text, voice, folder))
             metadata.update({"voice": voice, "voice_name": VOICES[voice]["name"], "language": args.language, "cues": cues})

@@ -31,7 +31,7 @@
 python3 <skill-dir>/scripts/tts.py generate --file <正文.txt> --voice my-voice --speed 0.95 --instruct "用生气的语气说。语气严厉，咬字有力，表现出压抑不住的怒火。" --output-dir <输出目录>
 ```
 
-脚本把 `instruct`、`experimental: true` 和接入方式保存到 `metadata.json`，返回结果也标明实验性质。`--instruct` 仅支持 `my-voice`；Edge 音色会明确报错，避免指令被静默忽略。新情绪可以改写指令尝试，但需标明未验证，不因本例成功生成音频而声称所有情绪都有效。
+脚本把 `instruct`、`experimental: true` 和接入方式保存到 `metadata.json`，返回结果也标明实验性质。`--instruct` 支持所有已配置的克隆音色；下面示例中的 `my-voice` 可换成已保存的名称，例如“讲解声”。Edge 音色会明确报错，避免指令被静默忽略。新情绪可以改写指令尝试，但需标明未验证，不因本例成功生成音频而声称所有情绪都有效。
 
 编写指令时优先描述可听到的语气、重音、咬字和情绪强度。例如“语气严厉、咬字有力”比只写一个标签更明确。数字语速由 `--speed` / `--rate` / `--duration` 控制；精确停顿交给音频拼接，不靠“……”或让模型读出“停顿三秒”。交付描述可用“已用你的音色加入愤怒语气指令，效果请试听判断”。
 

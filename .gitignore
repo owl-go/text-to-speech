@@ -1,6 +1,7 @@
 # Private voice references and configurations
-assets/voices/my-voice/*
-!assets/voices/my-voice/profile.example.json
+assets/voices/*/*
+!assets/voices/*/profile.example.json
+voices/
 profile.json
 *.wav
 *.mp3
