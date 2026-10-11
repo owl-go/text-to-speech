@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- 安装 Git 和 Python，推荐 Python 3.12。脚本首次使用时会准备持久 Python 环境及对应依赖。
+- 安装脚本需要 Bash、curl、Git 和 Python 3，推荐 Python 3.12。语音脚本首次使用时会准备持久 Python 环境及对应依赖。
 - Edge 预设音色需要联网；本机原声克隆使用 Apple Silicon Mac。
 - 麦克风现场录制目前支持 macOS，需要给实际运行录音的终端或桌面应用授予麦克风权限。也可以导入已有录音。
 - 首次使用原声模型会下载约 2.3 GB 的模型权重，并复用本机缓存；之后的原声推理和参考录音处理均在本机。
@@ -13,36 +13,54 @@
 
 ### Codex
 
-安装到用户级技能目录，供各个项目使用：
+执行安装脚本，自动下载并安装到用户级技能目录，供各个项目使用：
 
 ```bash
-mkdir -p "$HOME/.agents/skills"
-git clone https://github.com/owl-go/text-to-speech.git "$HOME/.agents/skills/text-to-speech"
+curl -fsSL https://raw.githubusercontent.com/owl-go/text-to-speech/main/install.sh | bash -s -- --target codex
 ```
 
-在 Codex 中输入 `$text-to-speech`，或在 `/skills` 中选择此技能。项目级安装可将目标目录改为 `.agents/skills/text-to-speech`。[Codex 官方安装位置与调用说明](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
+默认安装位置为 `~/.agents/skills/text-to-speech`。在 Codex 中输入 `$text-to-speech`，或在 `/skills` 中选择此技能。[Codex 官方安装位置与调用说明](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
 
 ### Claude Code
 
-安装到个人技能目录：
+执行安装脚本，安装到个人技能目录：
 
 ```bash
-mkdir -p "$HOME/.claude/skills"
-git clone https://github.com/owl-go/text-to-speech.git "$HOME/.claude/skills/text-to-speech"
+curl -fsSL https://raw.githubusercontent.com/owl-go/text-to-speech/main/install.sh | bash -s -- --target claude
 ```
 
-在 Claude Code 中输入 `/text-to-speech`。项目级安装可将目标目录改为 `.claude/skills/text-to-speech`。两种工具使用同一份 `SKILL.md` 和 Python 脚本；`agents/openai.yaml` 只提供 Codex 的界面元数据。[Claude Code 官方技能说明](https://code.claude.com/docs/en/skills#choose-where-skills-load)
+默认安装位置为 `~/.claude/skills/text-to-speech`。在 Claude Code 中输入 `/text-to-speech`。两种工具使用同一份 `SKILL.md` 和 Python 脚本；`agents/openai.yaml` 只提供 Codex 的界面元数据。[Claude Code 官方技能说明](https://code.claude.com/docs/en/skills#choose-where-skills-load)
 
 ### 同时使用两者
 
-可以分别安装；新克隆的音色保存在共享数据目录，因此可以在两种工具中按同一个名称使用。也可以在安装 Codex 版本后，让 Claude Code 使用同一个技能目录：
+一条命令安装到两个工具的用户级目录：
 
 ```bash
-mkdir -p "$HOME/.claude/skills"
-ln -s "$HOME/.agents/skills/text-to-speech" "$HOME/.claude/skills/text-to-speech"
+curl -fsSL https://raw.githubusercontent.com/owl-go/text-to-speech/main/install.sh | bash -s -- --target both
 ```
 
-以上命令适用于目标目录尚不存在的情况。已有安装时在对应仓库目录执行 `git pull --ff-only`，保留本机参考音频与配置。早期版本保存在技能目录中的“我的音色”仍可使用；迁移目录前保留 `assets/voices/my-voice/reference.wav` 和 `profile.json`。
+新克隆的命名音色保存在共享数据目录，可以在两个工具中按同一个名称使用。
+
+### 项目级安装与更新
+
+给安装脚本增加 `--project`，自动安装到该项目的 `.agents/skills/`、`.claude/skills/`：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/owl-go/text-to-speech/main/install.sh | bash -s -- --target both --project /绝对路径/项目目录
+```
+
+**更新时重新执行相同安装命令即可。** 脚本更新公开代码，保留目标目录已有的私人参考录音、实际音色配置及共享数据目录。用户级安装还会从旧版 `$CODEX_HOME/skills/text-to-speech`（默认 `~/.codex/skills/text-to-speech`）复制默认原声样本与配置；已有目标音色时保留目标配置。项目级安装不自动复制个人录音。
+
+安装完成后，若技能没有出现在列表中，重启对应应用或会话。安装阶段只下载技能代码；依赖与模型在首次使用对应功能时准备。
+
+也可以先下载脚本再运行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/owl-go/text-to-speech/main/install.sh -o install-text-to-speech.sh
+bash install-text-to-speech.sh --target both
+```
+
+以上命令使用 Bash，可在 macOS/Linux 终端执行；安装入口的变化不改变上文的语音功能平台要求。
 
 ## 常见使用方式
 
